@@ -1,16 +1,12 @@
 const express = require("express");
+const MongoClient = require("mongodb").MongoClient;
+const { ObjectId } = require("mongodb");
+require("dotenv").config();
 
 const app = express();
-
-const MongoClient = require("mongodb");
-
-const port = 5000;
+const port = process.env.PORT || 5000;
 
 app.use(express.json());
-
-const { ObjectId } = require("mongodb");
-
-require("dotenv").config();
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -26,72 +22,67 @@ app.use((req, res, next) => {
 });
 
 const mongo_url = process.env.mongo_url;
-console.log(mongo_url)
+let client;
 
-async function main() {
-  const client = new MongoClient.MongoClient(mongo_url);
-  await client.connect();
-  console.log("Connected successfully to server");
+async function connectToMongo() {
+  if (!client) {
+    client = new MongoClient(mongo_url, { useNewUrlParser: true, useUnifiedTopology: true });
+    await client.connect();
+    console.log("Connected successfully to MongoDB server");
+  }
   return client;
 }
 
-// Root (homepage) GET method
-app.get("/", function (req, res) {
+app.get("/", (req, res) => {
   res.send("ABC SCHOOL STUDENT REGISTRATION");
 });
 
 app.get("/home/", async (req, res) => {
-  const client = await main();
-  const stuData = await client
-    .db("new-mongo1")
-    .collection("students")
-    .find()
-    .toArray();
-  res.send(stuData);
-  client.close();
+  try {
+    const client = await connectToMongo();
+    const stuData = await client.db("new-mongo1").collection("students").find().toArray();
+    res.send(stuData);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
 app.post("/home/", async (req, res) => {
-  const client = await main();
-  const stuData = await client
-    .db("new-mongo1")
-    .collection("students")
-    .insertOne(req.body);
-  console.log(stuData);
-  res.send(stuData);
-  client.close();
+  try {
+    const client = await connectToMongo();
+    const stuData = await client.db("new-mongo1").collection("students").insertOne(req.body);
+    res.send(stuData);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
 app.post("/update/", async (req, res) => {
-  const client = await main();
-  /*  console.log(req.body)
-  const stuData = await client.db("new-mongo1").collection("students").find({"_id":req.body._id}).toArray() */
-  const id = new ObjectId(req.body._id);
-  delete req.body._id;
-  const result = await client
-    .db("new-mongo1")
-    .collection("students")
-    .updateOne({ _id: id }, { $set: req.body });
-  if (result.modifiedCount === 0) {
-    return res.status(404).send({ message: "Document not found" });
+  try {
+    const client = await connectToMongo();
+    const id = new ObjectId(req.body._id);
+    delete req.body._id;
+    const result = await client.db("new-mongo1").collection("students").updateOne({ _id: id }, { $set: req.body });
+    if (result.modifiedCount === 0) {
+      return res.status(404).send({ message: "Document not found" });
+    }
+    res.send({ message: "Student detail updated successfully" });
+  } catch (error) {
+    res.status(500).send({ message: error.message });
   }
-  res.send("student detail updated successfully");
-  /* console.log(stuData);
-  res.send(stuData); */
-  client.close();
 });
 
 app.delete("/home/", async (req, res) => {
-  const client = await main();
-  // const id = req.params.id;
-  const deleteDetail = await client
-    .db("new-mongo1")
-    .collection("students")
-    .findOneAndDelete(req.body);
-  deleteDetail
-    ? res.send("student detail deleted successfully")
-    : res.send("detail not found");
-  client.close();
+  try {
+    const client = await connectToMongo();
+    const deleteDetail = await client.db("new-mongo1").collection("students").findOneAndDelete(req.body);
+    if (!deleteDetail.value) {
+      return res.status(404).send({ message: "Detail not found" });
+    }
+    res.send({ message: "Student detail deleted successfully" });
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
 app.listen(port, () => console.log("Server started on port:", port));
